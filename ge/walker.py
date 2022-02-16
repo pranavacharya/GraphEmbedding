@@ -12,7 +12,7 @@ from .utils import partition_num
 
 
 class RandomWalker:
-    def __init__(self, G, p=1, q=1, use_rejection_sampling=0):
+    def __init__(self, G, p=1, q=1, use_rejection_sampling=0, algo = ''):
         """
         :param G:
         :param p: Return parameter,controls the likelihood of immediately revisiting a node in the walk.
@@ -23,6 +23,7 @@ class RandomWalker:
         self.p = p
         self.q = q
         self.use_rejection_sampling = use_rejection_sampling
+        self.algo = algo
 
     def deepwalk_walk(self, walk_length, start_node):
 
@@ -116,6 +117,37 @@ class RandomWalker:
                 break
         return walk
 
+    # function for shortcut walk
+    def shortcut_walk(self, walk_length, start_node):
+
+        # add start node to path
+        walk = [start_node]
+
+        # all node list
+        all_nodes = list(self.G.nodes)
+
+        # repeat till path length equals walk_length
+        while len(walk) < walk_length:
+
+            # get last node in path
+            curr = walk[-1]
+
+            # get probability
+            curr_p = random.random()
+
+            if curr_p <= self.p:
+                # pick randomly from neighbours
+                neighbours = list(self.G.neighbors(curr))
+                if len(neighbours) > 0:
+                    walk.append(random.choice(neighbours))
+                else:
+                    break
+            else:
+                # pick any vertex at random
+                walk.append(random.choice(all_nodes))
+
+        return walk
+
     def simulate_walks(self, num_walks, walk_length, workers=1, verbose=0):
 
         G = self.G
@@ -140,6 +172,10 @@ class RandomWalker:
                         walk_length=walk_length, start_node=v))
                 elif self.use_rejection_sampling:
                     walks.append(self.node2vec_walk2(
+                        walk_length=walk_length, start_node=v))
+                elif self.algo == 'shortcut':
+                    # added condition for shortcut walk
+                    walks.append(self.shortcut_walk(
                         walk_length=walk_length, start_node=v))
                 else:
                     walks.append(self.node2vec_walk(
