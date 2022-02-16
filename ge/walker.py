@@ -6,9 +6,13 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from tqdm import trange
+import networkx as nx
+import collections
+import bisect
 
 from .alias import alias_sample, create_alias_table
 from .utils import partition_num
+
 
 
 class RandomWalker:
@@ -24,6 +28,7 @@ class RandomWalker:
         self.q = q
         self.use_rejection_sampling = use_rejection_sampling
         self.algo = algo
+        self.cluster_coeff = None
 
     def deepwalk_walk(self, walk_length, start_node):
 
@@ -148,6 +153,67 @@ class RandomWalker:
 
         return walk
 
+    # function for similarity walk
+    def similarity_walk(self, walk_length, start_node):
+
+        # add start node to path
+        walk = [start_node]
+
+        # get clustering coefficient of all nodes
+        if self.cluster_coeff == None:
+            cls = nx.clustering(self.G);
+            self.cluster_coeff = cls
+
+        # key clustering coefficient, value list of nodes
+        clustering_coefficient = {}
+        for node in self.cluster_coeff:
+            if not self.cluster_coeff[node] in clustering_coefficient: # if key not present insert key as clustering coefficient
+                clustering_coefficient[self.cluster_coeff[node]] = []
+            clustering_coefficient[self.cluster_coeff[node]].append(node);
+
+        # sorting for binary search
+        clustering_coefficient_key_list = list(clustering_coefficient.keys());
+        clustering_coefficient_key_list.sort()
+
+
+        # repeat till path length equals walk_length
+        while len(walk) < walk_length:
+
+            # get last node in path
+            curr = walk[-1]
+
+            # get probability
+            curr_p = random.random()
+
+            if curr_p <= self.p:
+                # pick randomly from neighbours
+                neighbours = list(self.G.neighbors(curr))
+                if len(neighbours) > 0:
+                    walk.append(random.choice(neighbours))
+                else:
+                    break
+            else:
+                # pick vertex with same clustering coefficient
+
+                # curr clustering coefficient 
+                curr_cls_coeff = self.cluster_coeff[curr];
+
+                # binary search
+                index = bisect.bisect_left(clustering_coefficient_key_list, curr_cls_coeff)
+                
+                # if index out of range use last element
+                if index == len(clustering_coefficient_key_list):
+                    index -= 1;
+
+                similar_nodes = clustering_coefficient[clustering_coefficient_key_list[index]];
+                
+                if len(similar_nodes) > 0:
+                    walk.append(random.choice(similar_nodes))
+                else:
+                    break;
+
+        return walk
+
     def simulate_walks(self, num_walks, walk_length, workers=1, verbose=0):
 
         G = self.G
@@ -176,6 +242,10 @@ class RandomWalker:
                 elif self.algo == 'shortcut':
                     # added condition for shortcut walk
                     walks.append(self.shortcut_walk(
+                        walk_length=walk_length, start_node=v))
+                elif self.algo == 'similarity':
+                    # added condition for similarity walk
+                    walks.append(self.similarity_walk(
                         walk_length=walk_length, start_node=v))
                 else:
                     walks.append(self.node2vec_walk(
